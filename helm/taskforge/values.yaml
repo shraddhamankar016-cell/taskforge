@@ -1,5 +1,5 @@
 image:
-  registry: ghcr.io/USERNAME
+  registry: ghcr.io/shraddhamankar016-cell
   tag: latest
 api: {replicas: 2}
 worker: {replicas: 1}
