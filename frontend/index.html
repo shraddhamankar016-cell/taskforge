@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TaskForge · Distributed Job Platform</title>
+<style>
+:root{--bg:#0b0e17;--card:#141926;--line:#242b40;--txt:#e8ebf7;--mut:#8b93b3;--acc:#f59e0b;--ok:#22c55e;--bad:#ef4444;--blue:#3b82f6;--gray:#6b7280}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:radial-gradient(circle at 20% -10%,#1b2140 0,var(--bg) 45%);color:var(--txt);min-height:100vh}
+.wrap{max-width:1180px;margin:auto;padding:24px 20px 40px}
+header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:22px}
+.logo{font-size:26px;font-weight:800}.logo span{color:var(--acc)}.sub{color:var(--mut);font-size:13px;margin-top:2px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border:1px solid var(--line);border-radius:99px;font-size:13px;background:var(--card)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--gray)}.dot.ok{background:var(--ok);box-shadow:0 0 8px var(--ok)}.dot.bad{background:var(--bad)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.stat small{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.06em}.stat b{display:block;font-size:34px;margin-top:6px}
+.c-q b{color:var(--gray)}.c-p b{color:var(--blue)}.c-d b{color:var(--ok)}.c-f b{color:var(--bad)}.c-l b{color:var(--acc)}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:18px}@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:18px}
+h2{margin:0 0 12px;font-size:15px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+form{display:flex;gap:8px;flex-wrap:wrap}
+select,input{padding:10px 12px;border-radius:9px;border:1px solid var(--line);background:#0e1220;color:var(--txt)}input{flex:1;min-width:180px}
+button{padding:10px 16px;border:0;border-radius:9px;font-weight:700;cursor:pointer;background:var(--acc);color:#111}
+button.alt{background:transparent;color:var(--txt);border:1px solid var(--line)}button.alt:hover{border-color:var(--acc)}
+.actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}.hint{color:var(--mut);font-size:12px;margin-top:8px}
+table{width:100%;border-collapse:collapse}th,td{padding:9px 8px;text-align:left;font-size:13px;border-bottom:1px solid var(--line);word-break:break-all}
+th{color:var(--mut);font-weight:600}td.id{font-family:ui-monospace,monospace;color:var(--mut)}
+.s{padding:2px 10px;border-radius:99px;font-size:12px;font-weight:600;color:#fff}.queued{background:var(--gray)}.processing{background:var(--blue)}.done{background:#16a34a}.failed{background:#dc2626}
+svg{width:100%;height:110px;display:block}
+.flow{display:flex;flex-direction:column;gap:6px;font-size:13px}.node{padding:9px 12px;border-radius:9px;background:#0e1220;border:1px solid var(--line);display:flex;justify-content:space-between}
+.node em{color:var(--mut);font-style:normal}.arrow{text-align:center;color:var(--acc);line-height:1}
+.badges{display:flex;flex-wrap:wrap;gap:6px}.badges span{font-size:12px;padding:4px 10px;border-radius:7px;background:#0e1220;border:1px solid var(--line);color:var(--mut)}
+footer{text-align:center;color:var(--mut);font-size:12px;margin-top:10px}
+</style></head><body><div class="wrap">
+<header>
+  <div><div class="logo">Task<span>Forge</span></div><div class="sub">Distributed job processing platform · Kubernetes · GitOps</div></div>
+  <div><span class="pill"><span class="dot" id="dot"></span><span id="health">connecting…</span></span></div>
+</header>
+
+<section class="stats">
+  <div class="stat c-l"><small>Queue length</small><b id="s-q">0</b></div>
+  <div class="stat c-q"><small>Queued</small><b id="s-queued">0</b></div>
+  <div class="stat c-p"><small>Processing</small><b id="s-proc">0</b></div>
+  <div class="stat c-d"><small>Completed</small><b id="s-done">0</b></div>
+  <div class="stat c-f"><small>Failed</small><b id="s-fail">0</b></div>
+</section>
+
+<div class="grid"><div>
+  <div class="card"><h2>Submit a job</h2>
+    <form id="f"><select id="t"><option value="hash">hash · SHA-256</option><option value="wordcount">wordcount</option><option value="sleep">sleep · seconds</option></select>
+    <input id="p" placeholder="payload (text, or seconds for sleep)"><button>Submit</button></form>
+    <div class="actions"><button class="alt" id="load">⚡ Load test: 30 sleep jobs</button><button class="alt" id="mix">🎲 Add 5 mixed jobs</button></div>
+    <div class="hint">Load test fills the Redis queue — watch workers scale up with KEDA in Kubernetes.</div></div>
+  <div class="card"><h2>Queue length (live)</h2><svg id="chart" viewBox="0 0 600 110" preserveAspectRatio="none"></svg></div>
+  <div class="card"><h2>Recent jobs</h2>
+    <table><thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Result</th></tr></thead><tbody id="b"></tbody></table></div>
+</div><div>
+  <div class="card"><h2>Request flow</h2><div class="flow">
+    <div class="node">Browser <em>you are here</em></div><div class="arrow">↓</div>
+    <div class="node">nginx frontend <em>:8080</em></div><div class="arrow">↓</div>
+    <div class="node">FastAPI <em>api · :8000</em></div><div class="arrow">↓</div>
+    <div class="node">Redis <em>job queue</em></div><div class="arrow">↓</div>
+    <div class="node">Python workers <em>autoscaled</em></div></div></div>
+  <div class="card"><h2>Platform stack</h2><div class="badges">
+    <span>Python</span><span>FastAPI</span><span>Redis</span><span>Docker</span><span>Kubernetes</span><span>Helm</span><span>Argo CD</span><span>KEDA</span><span>Prometheus</span><span>Grafana</span><span>GitHub Actions</span><span>Trivy</span><span>Gitleaks</span></div></div>
+  <div class="card"><h2>Observability</h2><div class="hint" style="margin:0">Metrics at <code>/api/../metrics</code> on the API and :8001 on workers, scraped by Prometheus and visualised in Grafana.</div></div>
+</div></div>
+<footer>TaskForge <span id="ver"></span> · built with DevOps best practices</footer>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const hist=Array(40).fill(0);
+const post=(type,payload)=>fetch('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,payload})});
+function draw(){
+  const max=Math.max(5,...hist),pts=hist.map((v,i)=>`${i*(600/39)},${105-(v/max)*95}`).join(' ');
+  $('chart').innerHTML=`<polyline fill="rgba(245,158,11,.15)" stroke="none" points="0,110 ${pts} 600,110"/><polyline fill="none" stroke="#f59e0b" stroke-width="2.5" points="${pts}"/>`;
+}
+async function load(){
+  try{
+    const [st,jobs]=await Promise.all([fetch('/api/stats').then(r=>r.json()),fetch('/api/jobs').then(r=>r.json())]);
+    $('dot').className='dot ok';$('health').textContent='API healthy';$('ver').textContent='· v'+st.version;
+    $('s-q').textContent=st.queue_length;$('s-queued').textContent=st.queued;$('s-proc').textContent=st.processing;$('s-done').textContent=st.done;$('s-fail').textContent=st.failed;
+    hist.push(st.queue_length);hist.shift();draw();
+    $('b').innerHTML=jobs.map(j=>`<tr><td class="id">${esc(j.id)}</td><td>${esc(j.type)}</td><td><span class="s ${esc(j.status)}">${esc(j.status)}</span></td><td>${esc(j.result)}</td></tr>`).join('')||'<tr><td colspan="4" style="color:var(--mut)">No jobs yet — submit one above.</td></tr>';
+  }catch(e){$('dot').className='dot bad';$('health').textContent='API unreachable';}
+}
+$('f').onsubmit=async e=>{e.preventDefault();await post($('t').value,$('p').value);$('p').value='';load();};
+$('load').onclick=async()=>{await Promise.all(Array.from({length:30},()=>post('sleep','5')));load();};
+$('mix').onclick=async()=>{const w=['alpha beta gamma','kubernetes helm argo','devops is fun','gitops rocks','hello taskforge'];
+  await Promise.all(Array.from({length:5},(_,i)=>post(['hash','wordcount'][i%2],w[i])));load();};
+load();setInterval(load,1500);draw();
+</script></body></html>

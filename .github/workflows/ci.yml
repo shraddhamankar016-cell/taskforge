@@ -1,0 +1,47 @@
+name: CI/CD
+on:
+  push: {branches: [main]}
+  pull_request:
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install ruff -r services/api/requirements.txt -r services/worker/requirements.txt
+      - run: ruff check services
+      - run: cd services/api && pytest -q
+      - uses: azure/setup-helm@v4
+      - run: helm lint helm/taskforge && helm template t helm/taskforge > /dev/null
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env: {GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"}
+
+  images:
+    needs: quality
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {name: api, context: services/api}
+          - {name: worker, context: services/worker}
+          - {name: frontend, context: frontend}
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t local/${{ matrix.name }} ${{ matrix.context }}
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with: {image-ref: "local/${{ matrix.name }}", severity: "CRITICAL", exit-code: "0"}
+      - if: github.ref == 'refs/heads/main'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - if: github.ref == 'refs/heads/main'
+        run: |
+          IMG=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/taskforge-${{ matrix.name }}
+          docker tag local/${{ matrix.name }} $IMG:latest
+          docker tag local/${{ matrix.name }} $IMG:${{ github.sha }}
+          docker push $IMG:latest && docker push $IMG:${{ github.sha }}

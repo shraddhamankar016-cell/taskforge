@@ -1,0 +1,117 @@
+{{- $n := .Release.Name }}
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: {{ $n }}-redis}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: {{ $n }}-redis}}
+  template:
+    metadata: {labels: {app: {{ $n }}-redis}}
+    spec:
+      containers:
+        - {name: redis, image: "redis:7-alpine", ports: [{containerPort: 6379}]}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: {{ $n }}-redis}
+spec:
+  selector: {app: {{ $n }}-redis}
+  ports: [{port: 6379}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: {{ $n }}-api}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector: {matchLabels: {app: {{ $n }}-api}}
+  template:
+    metadata: {labels: {app: {{ $n }}-api}}
+    spec:
+      containers:
+        - name: api
+          image: {{ .Values.image.registry }}/taskforge-api:{{ .Values.image.tag }}
+          ports: [{containerPort: 8000}]
+          env: [{name: REDIS_URL, value: "redis://{{ $n }}-redis:6379/0"}]
+          resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 300m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false}
+          readinessProbe: {httpGet: {path: /healthz, port: 8000}, initialDelaySeconds: 3}
+          livenessProbe: {httpGet: {path: /healthz, port: 8000}, initialDelaySeconds: 10}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: {{ $n }}-api}
+spec:
+  selector: {app: {{ $n }}-api}
+  ports: [{port: 8000}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: {{ $n }}-worker}
+spec:
+  {{- if not .Values.keda.enabled }}
+  replicas: {{ .Values.worker.replicas }}
+  {{- end }}
+  selector: {matchLabels: {app: {{ $n }}-worker}}
+  template:
+    metadata:
+      labels: {app: {{ $n }}-worker}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/port: "8001"}
+    spec:
+      containers:
+        - name: worker
+          image: {{ .Values.image.registry }}/taskforge-worker:{{ .Values.image.tag }}
+          env: [{name: REDIS_URL, value: "redis://{{ $n }}-redis:6379/0"}]
+          resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 300m, memory: 128Mi}}
+          securityContext: {allowPrivilegeEscalation: false}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: {{ $n }}-frontend}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: {{ $n }}-frontend}}
+  template:
+    metadata: {labels: {app: {{ $n }}-frontend}}
+    spec:
+      containers:
+        - name: frontend
+          image: {{ .Values.image.registry }}/taskforge-frontend:{{ .Values.image.tag }}
+          ports: [{containerPort: 8080}]
+          env: [{name: API_URL, value: "http://{{ $n }}-api:8000"}]
+          resources: {requests: {cpu: 20m, memory: 16Mi}, limits: {cpu: 100m, memory: 64Mi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: {{ $n }}-frontend}
+spec:
+  selector: {app: {{ $n }}-frontend}
+  ports: [{port: 80, targetPort: 8080}]
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: {{ $n }}}
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - {path: /, pathType: Prefix, backend: {service: {name: {{ $n }}-frontend, port: {number: 80}}}}
+{{- end }}
+{{- if .Values.keda.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata: {name: {{ $n }}-worker}
+spec:
+  scaleTargetRef: {name: {{ $n }}-worker}
+  minReplicaCount: 1
+  maxReplicaCount: {{ .Values.keda.maxReplicas }}
+  triggers:
+    - type: redis
+      metadata:
+        address: {{ $n }}-redis:6379
+        listName: taskforge:queue
+        listLength: "{{ .Values.keda.jobsPerWorker }}"
+{{- end }}

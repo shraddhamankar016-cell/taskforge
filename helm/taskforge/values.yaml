@@ -1,0 +1,8 @@
+image:
+  registry: ghcr.io/USERNAME
+  tag: latest
+api: {replicas: 2}
+worker: {replicas: 1}
+# KEDA scales workers on Redis queue length (install KEDA first, see README)
+keda: {enabled: false, maxReplicas: 10, jobsPerWorker: 5}
+ingress: {enabled: true, host: taskforge.local}

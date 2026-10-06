@@ -1,0 +1,23 @@
+services:
+  redis:
+    image: redis:7-alpine
+  api:
+    build: ./services/api
+    environment: {REDIS_URL: "redis://redis:6379/0", APP_VERSION: compose}
+    depends_on: [redis]
+  worker:
+    build: ./services/worker
+    environment: {REDIS_URL: "redis://redis:6379/0"}
+    depends_on: [redis]
+    deploy: {replicas: 2}
+  frontend:
+    build: ./frontend
+    ports: ["8080:8080"]
+    depends_on: [api]
+  prometheus:
+    image: prom/prometheus:latest
+    volumes: ["./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+  grafana:
+    image: grafana/grafana:latest
+    ports: ["3000:3000"]
