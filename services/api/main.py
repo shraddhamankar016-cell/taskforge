@@ -1,5 +1,4 @@
 """TaskForge API: accepts jobs, pushes them to a Redis queue, exposes status + Prometheus metrics."""
-import json
 import logging
 import os
 import time
