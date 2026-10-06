@@ -4,7 +4,7 @@ metadata: {name: taskforge, namespace: argocd}
 spec:
   project: default
   source:
-    repoURL: https://github.com/YOUR_USERNAME/taskforge.git
+    repoURL: https://github.com/shraddhamankar016-cell/taskforge.git
     targetRevision: main
     path: helm/taskforge
   destination: {server: https://kubernetes.default.svc, namespace: taskforge}
